@@ -1,13 +1,13 @@
 from data_preparation import *
-import numpy as np
+from sklearn.naive_bayes import MultinomialNB, GaussianNB, BernoulliNB, ComplementNB
 import matplotlib.pyplot as plt
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.manifold import LocallyLinearEmbedding, MDS
 from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
 from tqdm import tqdm
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score
+from sklearn.metrics import classification_report, confusion_matrix
 
 
 def dataset_visualization_2d(data, save_as, figsize=(10,8), title='Dataset Visualization', xlabel='x', ylabel='y', save_format="png"):
@@ -19,11 +19,11 @@ def dataset_visualization_2d(data, save_as, figsize=(10,8), title='Dataset Visua
     plt.ylabel(ylabel)
     plt.savefig(f"{save_as}.{save_format}")
 
-def visualize_dataset_with_PCA(tfidf_matrix):
+def visualize_dataset_with_PCA(X, n_components=2):
     # Reduce dimensions using PCA
-    pca = PCA(n_components=2)
+    pca = PCA(n_components=n_components)
     # pca_result = pca.fit_transform(tqdm(tfidf_matrix.toarray(), desc="Applying PCA"))
-    pca_result = pca.fit_transform(tfidf_matrix.toarray())
+    pca_result = pca.fit_transform(X)
 
     # Visualize PCA results
     dataset_visualization_2d(
@@ -33,11 +33,12 @@ def visualize_dataset_with_PCA(tfidf_matrix):
         xlabel="Principal Component 1",
         ylabel="Principal Component 2"
     )
+    return pca_result
 
-def visualize_dataset_with_MDS(tfidf_matrix):
+def visualize_dataset_with_MDS(X):
     # Reduce dimensions using MDS
-    mds = MDS(n_components=2)
-    mds_result = mds.fit_transform(tfidf_matrix.toarray())
+    mds = MDS(n_components=2, verbose=1, n_jobs=-1)
+    mds_result = mds.fit_transform(X)
 
     # Visualize MDS results
     dataset_visualization_2d(
@@ -47,13 +48,13 @@ def visualize_dataset_with_MDS(tfidf_matrix):
         xlabel="MDS Component 1",
         ylabel="MDS Component 2"
     )
+    return mds_result
 
-
-def visualize_dataset_with_LLE(tfidf_matrix):
+def visualize_dataset_with_LLE(X):
     # Reduce dimensions using Locally Linear Embedding (LLE)
-    lle = LocallyLinearEmbedding(n_components=2, n_neighbors=12)
+    lle = LocallyLinearEmbedding(n_components=2, n_neighbors=12, n_jobs=-1)
     # lle_result = lle.fit_transform(tqdm(tfidf_matrix.toarray(), desc="Applying LLE"))
-    lle_result = lle.fit_transform(tfidf_matrix.toarray())
+    lle_result = lle.fit_transform(X)
 
     # Visualize PCA results
     dataset_visualization_2d(
@@ -63,6 +64,7 @@ def visualize_dataset_with_LLE(tfidf_matrix):
         xlabel="LLE Component 1",
         ylabel="LLE Component 2"
     )
+    return lle_result
 
 def define_dataset():
     main_dataset_folder_path = "aclImdb_v1/aclImdb/"
@@ -81,9 +83,30 @@ def define_dataset():
 
     return train_reviews, train_labels, test_reviews, test_labels
 
-def learn_SVM_model(X_train, y_train, X_test, y_test):
-    # Define kernel functions to try
-    kernel_functions = ['linear', 'poly', 'rbf', 'sigmoid']
+def learn_NB_model(X_train, y_train, X_test, y_test, models=[("MultinomialNB", MultinomialNB())]):
+    for model_name, model in models:
+        print(f"Evaluating {model_name}")
+        # GaussianNB requires dense arrays instead of sparse matrices
+        if model_name == 'GaussianNB':
+            X_train = X_train.toarray()
+            X_test = X_test.toarray()
+
+        # Learn model
+        model.fit(X_train, y_train)
+        # Make predictions
+        y_pred_train = model.predict(X_train)
+        y_pred_test = model.predict(X_test)
+        # Evaluate accuracy
+        train_accuracy = accuracy_score(y_train, y_pred_train)
+        test_accuracy = accuracy_score(y_test, y_pred_test)
+
+        # Evaluate the classifier
+        print(f"Naive Base: Training Accuracy: {train_accuracy}, Testing Accuracy: {test_accuracy}")
+        print("Classification Report:\n", classification_report(test_labels, y_pred_test))
+        print("Confusion Matrix:\n", confusion_matrix(test_labels, y_pred_test))
+
+
+def learn_SVM_model(X_train, y_train, X_test, y_test, kernel_functions = ['linear']):
     # Dictionary to store results
     results = {}
     # Loop over kernel functions
@@ -98,7 +121,7 @@ def learn_SVM_model(X_train, y_train, X_test, y_test):
         # Evaluate accuracy
         train_accuracy = accuracy_score(y_train, y_pred_train)
         test_accuracy = accuracy_score(y_test, y_pred_test)
-        # Store results
+        # Store and print results
         print(f"Kernel: {kernel}, Training Accuracy: {train_accuracy}, Testing Accuracy: {test_accuracy}")
         results[kernel] = {'train_accuracy': train_accuracy, 'test_accuracy': test_accuracy}
     # Plotting kernel function results
@@ -130,11 +153,13 @@ if __name__ == '__main__':
 
     # -------- Visualize Data --------
     # # Visualize with PCA
-    # visualize_dataset_with_PCA(tfidf_matrix)
+    pca_result = visualize_dataset_with_PCA(
+        tfidf_matrix.toarray(), n_components=100
+    )
     # # Visualize with MDS
-    # visualize_dataset_with_MDS(tfidf_matrix)
-    # # Visualize with LEE
-    # visualize_dataset_with_LLE(tfidf_matrix)
+    # visualize_dataset_with_MDS(pca_result)
+    # # Visualize with LLE
+    visualize_dataset_with_LLE(pca_result)
 
     # -------- Learning model --------
     # Split data into training and testing sets
@@ -144,26 +169,28 @@ if __name__ == '__main__':
     y_test = test_labels
 
     # Learn the SVM model
-    learn_SVM_model(X_train, y_train, X_test, y_test)
+    learn_NB_model(
+        X_train, y_train, X_test, y_test,
+        models=[
+            ('MultinomialNB', MultinomialNB()),
+            ('GaussianNB', GaussianNB()),
+            ('BernoulliNB', BernoulliNB()),
+            ('ComplementNB', ComplementNB())
+        ]
+    )
+
+    # Learn the SVM model
+    learn_SVM_model(
+        X_train, y_train, X_test, y_test,
+        kernel_functions=[
+            'linear',
+            'poly',
+            'rbf',
+            'sigmoid'
+        ]
+    )
 
 
-
-    # # Initialize SVM classifier
-    # svm_classifier = SVC(kernel='linear')
-    #
-    # # Train the SVM classifier
-    # svm_classifier.fit(X_train, y_train)
-    #
-    # # Predictions
-    # y_pred_train = svm_classifier.predict(X_train)
-    # y_pred_test = svm_classifier.predict(X_test)
-    #
-    # # Evaluate accuracy
-    # train_accuracy = accuracy_score(y_train, y_pred_train)
-    # test_accuracy = accuracy_score(y_test, y_pred_test)
-    #
-    # print("Training Accuracy:", train_accuracy)
-    # print("Testing Accuracy:", test_accuracy)
 
 
 
