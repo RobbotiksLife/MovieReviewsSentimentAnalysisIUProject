@@ -1,14 +1,29 @@
 from data_preparation import *
+from spinner import *
+from terminal_utils import *
+
 from sklearn.naive_bayes import MultinomialNB, GaussianNB, BernoulliNB, ComplementNB
 import matplotlib.pyplot as plt
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.manifold import LocallyLinearEmbedding, MDS
 from sklearn.decomposition import PCA
 from tqdm import tqdm
+from tqdm.auto import tqdm as tqdm_auto
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import classification_report, confusion_matrix
+from alive_progress import alive_bar
+from threading import Thread
+import time
 
+global LOG_COLOR
+LOG_COLOR = '\033[38;2;247;84;100m'
+
+def run_with_spinner(func, func_args=(), func_kwargs={}, description="Processing", color: Fore = LOG_COLOR):
+    with Spinner(description=description, color=color):
+        # Run the given function with the provided arguments
+        result = func(*func_args, **func_kwargs)
+    return result
 
 def dataset_visualization_2d(data, save_as, figsize=(10,8), title='Dataset Visualization', xlabel='x', ylabel='y', save_format="png"):
     plt.figure(figsize=figsize)
@@ -67,7 +82,7 @@ def visualize_dataset_with_LLE(X):
     return lle_result
 
 def define_dataset():
-    main_dataset_folder_path = "aclImdb_v1/aclImdb/"
+    main_dataset_folder_path = "aclImdb/"
     # Load train data
     train_neg = read_txt_files(folder_path=f"{main_dataset_folder_path}train/neg")
     train_pos = read_txt_files(folder_path=f"{main_dataset_folder_path}train/pos")
@@ -83,9 +98,9 @@ def define_dataset():
 
     return train_reviews, train_labels, test_reviews, test_labels
 
-def learn_NB_model(X_train, y_train, X_test, y_test, models=[("MultinomialNB", MultinomialNB())]):
+def learn_NB_model(X_train, y_train, X_test, y_test, models=[("MultinomialNB", MultinomialNB())], color:str = Fore.WHITE):
     for model_name, model in models:
-        print(f"Evaluating {model_name}")
+        print_colored_text(f"Evaluating {model_name}", color=color)
         # GaussianNB requires dense arrays instead of sparse matrices
         if model_name == 'GaussianNB':
             X_train = X_train.toarray()
@@ -101,16 +116,17 @@ def learn_NB_model(X_train, y_train, X_test, y_test, models=[("MultinomialNB", M
         test_accuracy = accuracy_score(y_test, y_pred_test)
 
         # Evaluate the classifier
-        print(f"Naive Base: Training Accuracy: {train_accuracy}, Testing Accuracy: {test_accuracy}")
-        print("Classification Report:\n", classification_report(test_labels, y_pred_test))
-        print("Confusion Matrix:\n", confusion_matrix(test_labels, y_pred_test))
+        print_colored_text(f"Naive Base: Training Accuracy: {train_accuracy}, Testing Accuracy: {test_accuracy}", color=color)
+        print_colored_text(f"Classification Report:\n {classification_report(test_labels, y_pred_test)}", color=color)
+        print_colored_text(f"Confusion Matrix:\n {confusion_matrix(test_labels, y_pred_test)}", color=color)
 
 
-def learn_SVM_model(X_train, y_train, X_test, y_test, kernel_functions = ['linear']):
+def learn_SVM_model(X_train, y_train, X_test, y_test, kernel_functions=['linear'], color: str = Fore.WHITE):
     # Dictionary to store results
     results = {}
     # Loop over kernel functions
     for kernel in kernel_functions:
+        print_colored_text(f"Evaluating SVM model with kernel {kernel}", color=color)
         # Initialize SVM classifier
         svm_classifier = SVC(kernel=kernel)
         # Train the SVM classifier
@@ -122,7 +138,7 @@ def learn_SVM_model(X_train, y_train, X_test, y_test, kernel_functions = ['linea
         train_accuracy = accuracy_score(y_train, y_pred_train)
         test_accuracy = accuracy_score(y_test, y_pred_test)
         # Store and print results
-        print(f"Kernel: {kernel}, Training Accuracy: {train_accuracy}, Testing Accuracy: {test_accuracy}")
+        print_colored_text(f"Kernel: {kernel}, Training Accuracy: {train_accuracy}, Testing Accuracy: {test_accuracy}", color=color)
         results[kernel] = {'train_accuracy': train_accuracy, 'test_accuracy': test_accuracy}
     # Plotting kernel function results
     kernels = list(results.keys())
@@ -139,6 +155,7 @@ def learn_SVM_model(X_train, y_train, X_test, y_test, kernel_functions = ['linea
     plt.tight_layout()
     plt.savefig("svm_learning_kernel_functions_results.png")
 
+
 if __name__ == '__main__':
     # -------- Define Data --------
     train_reviews, train_labels, test_reviews, test_labels = define_dataset()
@@ -153,13 +170,27 @@ if __name__ == '__main__':
 
     # -------- Visualize Data --------
     # # Visualize with PCA
-    pca_result = visualize_dataset_with_PCA(
-        tfidf_matrix.toarray(), n_components=100
+    pca_result = run_with_spinner(
+        visualize_dataset_with_PCA,
+        func_args=(tfidf_matrix.toarray(), ),
+        func_kwargs={'n_components': 100},
+        description="PCA and Visualizing Dataset",
+        color=LOG_COLOR
     )
     # # Visualize with MDS
-    # visualize_dataset_with_MDS(pca_result)
+    # run_with_spinner(
+    #     visualize_dataset_with_MDS,
+    #     func_args=(pca_result, ),
+    #     description="MDS and Visualizing Dataset",
+    #     color=LOG_COLOR
+    # )
     # # Visualize with LLE
-    visualize_dataset_with_LLE(pca_result)
+    run_with_spinner(
+        visualize_dataset_with_LLE,
+        func_args=(pca_result, ),
+        description="LLA and Visualizing Dataset",
+        color=LOG_COLOR
+    )
 
     # -------- Learning model --------
     # Split data into training and testing sets
