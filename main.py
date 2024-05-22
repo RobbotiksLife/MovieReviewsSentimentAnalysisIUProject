@@ -344,6 +344,18 @@ import warnings
 # Optional: Suppress specific FutureWarning from huggingface_hub
 warnings.filterwarnings("ignore", category=FutureWarning, module='huggingface_hub.file_download')
 
+
+def encode_sentences_in_batches(sentences, model, tokenizer, batch_size=16):
+    all_embeddings = []
+    for i in tqdm(range(0, len(sentences), batch_size), desc="Vectorizing Data with BERT"):
+        batch_reviews = sentences[i:i + batch_size]
+        inputs = tokenizer(batch_reviews, return_tensors='pt', padding=True, truncation=True, max_length=512)
+        with torch.no_grad():
+            outputs = model(**inputs)
+            batch_embeddings = outputs.last_hidden_state[:, 0, :].numpy()
+            all_embeddings.append(batch_embeddings)
+    return np.vstack(all_embeddings)
+
 if __name__ == '__main__':
     # -------- Define Data --------
     X_train, y_train, X_test, y_test = define_dataset()
@@ -386,44 +398,17 @@ if __name__ == '__main__':
     # X_test = embed(X_test)
 
     # # Load pre-trained BERT model and tokenizer
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-    model = BertModel.from_pretrained('bert-base-uncased')
-    # tokenizer = BertTokenizer.from_pretrained('distilbert-base-uncased')
-    # model = BertModel.from_pretrained('distilbert-base-uncased')
-
-
-    def encode_reviews_in_batches(reviews, batch_size=16):
-        all_embeddings = []
-        for i in tqdm(range(0, len(reviews), batch_size), desc="Vectorizing Data with BERT"):
-            batch_reviews = reviews[i:i + batch_size]
-            inputs = tokenizer(batch_reviews, return_tensors='pt', padding=True, truncation=True, max_length=512)
-            with torch.no_grad():
-                outputs = model(**inputs)
-                batch_embeddings = outputs.last_hidden_state[:, 0, :].numpy()
-                all_embeddings.append(batch_embeddings)
-        return np.vstack(all_embeddings)
-
-    # def encode_reviews(reviews):
-    #     # Tokenize the reviews
-    #     inputs = tokenizer(reviews, return_tensors='pt', padding=True, truncation=True, max_length=512)
-    #
-    #     # Get the hidden states from the BERT model
-    #     with torch.no_grad():
-    #         outputs = model(**inputs)
-    #         # Get the embeddings for the [CLS] token (BERT's representation of the entire sentence)
-    #         embeddings = outputs.last_hidden_state[:, 0, :].numpy()
-    #
-    #     return embeddings
-
-
+    # tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')  # 'distilbert-base-uncased'
+    # model = BertModel.from_pretrained('bert-base-uncased')  # 'distilbert-base-uncased'
     # # Encode the reviews
-    # X_train = encode_reviews(X_train)
-    # X_test = encode_reviews(X_test)
-    # Save the vectorized data
-    X_train = encode_reviews_in_batches(X_train)
-    np.save('train_vectors.npy', X_train)
-    X_test = encode_reviews_in_batches(X_test)
-    np.save('test_vectors.npy', X_test)
+    # X_train = encode_sentences_in_batches(X_train, model, tokenizer)
+    # X_test = encode_sentences_in_batches(X_test, model, tokenizer)
+    # # Save the vectorized data
+    # np.save('train_vectors.npy', X_train)
+    # np.save('test_vectors.npy', X_test)
+    # # Load the vectorized data
+    X_train = np.load('train_vectors.npy')
+    X_test = np.load('test_vectors.npy')
 
     # -------- Visualize Data --------
     # # Visualize with PCA
