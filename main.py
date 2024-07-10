@@ -3,22 +3,25 @@ from spinner import *
 from terminal_utils import *
 
 import pandas as pd
-import numpy as np
 import seaborn as sns
 from sklearn.naive_bayes import MultinomialNB, GaussianNB, BernoulliNB, ComplementNB
-import matplotlib.pyplot as plt
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.manifold import LocallyLinearEmbedding, MDS
 from sklearn.decomposition import PCA
 from tqdm import tqdm
 from tqdm.auto import tqdm as tqdm_auto
 from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score
 from sklearn.metrics import classification_report, confusion_matrix
 from alive_progress import alive_bar
 from threading import Thread
 import time
 from sklearn.preprocessing import StandardScaler
+import numpy as np
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Flatten
+from tensorflow.keras.optimizers import Adam
+from sklearn.metrics import accuracy_score
+import matplotlib.pyplot as plt
 
 from gensim.models import Word2Vec
 from nltk.tokenize import word_tokenize
@@ -26,6 +29,12 @@ from nltk.corpus import stopwords
 
 import nltk
 import ssl
+
+import tensorflow_hub as hub
+import kagglehub
+from transformers import BertTokenizer, BertModel
+import torch
+import warnings
 
 global LOG_COLOR
 LOG_COLOR = '\033[38;2;247;84;100m'
@@ -92,8 +101,7 @@ def visualize_dataset_with_LLE(X):
     )
     return lle_result
 
-def define_dataset():
-    main_dataset_folder_path = "aclImdb/"
+def define_dataset(main_dataset_folder_path = "aclImdb/"):
     # Load train data
     train_neg = read_txt_files(folder_path=f"{main_dataset_folder_path}train/neg")
     train_pos = read_txt_files(folder_path=f"{main_dataset_folder_path}train/pos")
@@ -132,7 +140,7 @@ def plot_confusion_matrix(cm, classes, save_as, save_format="png", title='Confus
     plt.savefig(f"{save_as}.{save_format}")
 
 
-def learn_NB_model(X_train, y_train, X_test, y_test, models=[("MultinomialNB", MultinomialNB())], color:str = Fore.WHITE):
+def learn_NB_model(X_train, y_train, X_test, y_test, models=[("MultinomialNB", MultinomialNB())], color:str = Fore.WHITE, data_info=""):
     # Dictionary to store results
     results = {}
     # Loop over kernel models
@@ -157,7 +165,7 @@ def learn_NB_model(X_train, y_train, X_test, y_test, models=[("MultinomialNB", M
             X_test=X_test,
             y_test=y_test,
             color=color,
-            data_info=""
+            data_info=data_info
         )
         # Save train_test_accuracy
         results[model_name] = train_test_accuracy
@@ -166,10 +174,10 @@ def learn_NB_model(X_train, y_train, X_test, y_test, models=[("MultinomialNB", M
         data=results,
         title='Naive Base Classifiers Performance',
         xlabel='Classifier',
-        save_as='nb_classifiers_performance_not_standardized'
+        save_as=f'nb_classifiers_performance_not_standardized{data_info}'
     )
 
-def learn_SVM_model(X_train, y_train, X_test, y_test, kernel_functions=['linear'], color: str = Fore.WHITE):
+def learn_SVM_model(X_train, y_train, X_test, y_test, kernel_functions=['linear'], color: str = Fore.WHITE, data_info=""):
     # Dictionary to store results
     results = {}
     # Loop over kernel functions
@@ -191,7 +199,7 @@ def learn_SVM_model(X_train, y_train, X_test, y_test, kernel_functions=['linear'
             X_test=X_test,
             y_test=y_test,
             color=color,
-            data_info=""
+            data_info=data_info
         )
         # Save train_test_accuracy
         results[kernel] = train_test_accuracy
@@ -200,7 +208,7 @@ def learn_SVM_model(X_train, y_train, X_test, y_test, kernel_functions=['linear'
         data=results,
         title='SVM Classifier Performance for Different Kernel Functions',
         xlabel='Kernel Function',
-        save_as='svm_learning_kernel_functions_performance_not_standardized'
+        save_as=f'svm_learning_kernel_functions_performance_not_standardized{data_info}'
     )
 
 
@@ -329,8 +337,6 @@ def train_word_to_vec_model(X_train, X_test, sg: bool = False):
     return X_train, X_test
 
 
-import tensorflow_hub as hub
-import kagglehub
 
 def download_google_universal_sentence_encoder():
     # Download latest version
@@ -338,9 +344,6 @@ def download_google_universal_sentence_encoder():
     print_colored_text(f"Path to model files: {path}", color=LOG_COLOR)
     return path
 
-from transformers import BertTokenizer, BertModel
-import torch
-import warnings
 # Optional: Suppress specific FutureWarning from huggingface_hub
 warnings.filterwarnings("ignore", category=FutureWarning, module='huggingface_hub.file_download')
 
@@ -356,6 +359,132 @@ def encode_sentences_in_batches(sentences, model, tokenizer, batch_size=16):
             all_embeddings.append(batch_embeddings)
     return np.vstack(all_embeddings)
 
+
+def to_one_hot(y_pred):
+    y_pred = np.squeeze(y_pred)
+    max_index = np.argmax(y_pred)
+    one_hot = np.zeros_like(y_pred)
+    one_hot[max_index] = 1
+    return one_hot
+
+def visualize_data_with_Xs_ys_data(X_train, X_test, method='pca', n_components=2, n_neighbors=10):
+    """
+    Visualizes the given train and test data using PCA or LLE.
+
+    Parameters:
+    X_train (np.array): Training data.
+    X_test (np.array): Testing data.
+    method (str): Method to use for dimensionality reduction ('pca' or 'lle').
+    n_components (int): Number of components to use for dimensionality reduction.
+    n_neighbors (int): Number of neighbors to consider for LLE (only used if method='lle').
+    """
+    # Combine the datasets for dimensionality reduction
+    X_combined = np.vstack((X_train, X_test))
+
+    # Apply the selected dimensionality reduction method
+    if method == 'pca':
+        reducer = PCA(n_components=n_components)
+        X_transformed = reducer.fit_transform(X_combined)
+    elif method == 'lle':
+        reducer = LocallyLinearEmbedding(n_components=n_components, n_neighbors=n_neighbors)
+        X_transformed = reducer.fit_transform(X_combined)
+    else:
+        raise ValueError("Invalid method. Choose 'pca' or 'lle'.")
+
+    # Separate the transformed data back into training and testing sets
+    X_train_transformed = X_transformed[:X_train.shape[0]]
+    X_test_transformed = X_transformed[X_train.shape[0]:]
+
+    # Plot the results
+    plt.figure(figsize=(10, 6))
+    plt.scatter(X_train_transformed[:, 0], X_train_transformed[:, 1], label='Train', alpha=0.6)
+    plt.scatter(X_test_transformed[:, 0], X_test_transformed[:, 1], label='Test', alpha=0.6)
+    plt.xlabel(f'{method.upper()} Dimension 1')
+    plt.ylabel(f'{method.upper()} Dimension 2')
+    plt.title(f'{method.upper()} Plot of Train and Test Data')
+    plt.legend()
+    plt.show()
+
+
+
+def dataset_values_plot_visualization_helper(train_data, test_data, x_label, y_label, title, filename, save_format="png", palette='viridis',
+                                             alpha=0.5):
+    # Create DataFrames for plotting
+    train_df = pd.DataFrame(data=train_data, columns=[x_label, y_label, 'label'])
+    test_df = pd.DataFrame(data=test_data, columns=[x_label, y_label, 'label'])
+
+    # Plot
+    plt.figure(figsize=(10, 8))
+
+    # Plot training data
+    sns.scatterplot(data=train_df, x=x_label, y=y_label, hue='label', style='label', markers=['o'], s=100,
+                    palette=palette, edgecolor='k', alpha=alpha, legend='full')
+
+    # Plot testing data
+    sns.scatterplot(data=test_df, x=x_label, y=y_label, hue='label', style='label', markers=['X'], s=100,
+                    palette=palette, edgecolor='k', alpha=alpha, legend=False)
+
+    plt.title(title)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.legend(title='Label')
+    plt.grid(True)
+    plt.savefig(f"{filename}.{save_format}")
+    # plt.show()
+
+
+def visualize_dataset_values_with_PCA(X_train, X_test, y_train, y_test, filename, save_format="png", palette='viridis', alpha=0.5):
+    # Perform PCA
+    pca = PCA(n_components=2)
+    X_train_pca = pca.fit_transform(X_train)
+    X_test_pca = pca.transform(X_test)
+
+    # Append labels for plotting
+    train_data = np.column_stack((X_train_pca, y_train))
+    test_data = np.column_stack((X_test_pca, y_test))
+
+    # Plot using the helper function
+    dataset_values_plot_visualization_helper(train_data, test_data, 'PC1', 'PC2', 'PCA Plot', filename, save_format, palette, alpha)
+
+
+def visualize_dataset_values_with_LLE(X_train, X_test, y_train, y_test, filename, save_format="png", palette='viridis', n_neighbors=10,
+                                      n_components=2):
+    # Perform LLE
+    lle = LocallyLinearEmbedding(n_neighbors=n_neighbors, n_components=n_components)
+    X_train_lle = lle.fit_transform(X_train)
+    X_test_lle = lle.transform(X_test)
+
+    # Append labels for plotting
+    train_data = np.column_stack((X_train_lle, y_train))
+    test_data = np.column_stack((X_test_lle, y_test))
+
+    # Plot using the helper function
+    dataset_values_plot_visualization_helper(train_data, test_data, 'Component 1', 'Component 2', 'LLE Plot', filename, save_format, palette)
+
+def plot_nn_performance(history, filename):
+    # Plot training & validation accuracy values
+    plt.figure(figsize=(12, 4))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(history.history['accuracy'])
+    plt.plot(history.history['val_accuracy'])
+    plt.title('Model accuracy')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.legend(['Train', 'Test'], loc='upper left')
+
+    # Plot training & validation loss values
+    plt.subplot(1, 2, 2)
+    plt.plot(history.history['loss'])
+    plt.plot(history.history['val_loss'])
+    plt.title('Model loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend(['Train', 'Test'], loc='upper left')
+
+    plt.savefig(f"{filename}.png")
+
+
 if __name__ == '__main__':
     # -------- Define Data --------
     X_train, y_train, X_test, y_test = define_dataset()
@@ -364,7 +493,6 @@ if __name__ == '__main__':
     all_labels = y_train + y_test
 
     # -------- Vectorize Data --------
-
     # # Vectorize the text data using TF-IDF with stop words removal
     # vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
     # tfidf_matrix = vectorizer.fit_transform(tqdm(all_reviews, desc="Vectorizing text data"))
@@ -383,6 +511,7 @@ if __name__ == '__main__':
     #     X_test,
     #     sg=False
     # )
+
     # # Vectorize with Skip-gram
     # X_train, X_test = train_word_to_vec_model(
     #     X_train,
@@ -411,11 +540,19 @@ if __name__ == '__main__':
     X_test = np.load('test_vectors.npy')
 
     # -------- Visualize Data --------
-    # # Visualize with PCA
+    # # Visualize with PCA TF-IDF
     # pca_result = run_with_spinner(
     #     visualize_dataset_with_PCA,
     #     func_args=(tfidf_matrix.toarray(), ),
     #     func_kwargs={'n_components': 2},
+    #     description="PCA and Visualizing Dataset",
+    #     color=LOG_COLOR
+    # )
+    # # Visualize with PCA BERT
+    # run_with_spinner(
+    #     visualize_dataset_values_with_PCA,
+    #     func_args=(X_train, X_test, y_train, y_test),
+    #     func_kwargs={'filename': "dataset_pca_bert"},
     #     description="PCA and Visualizing Dataset",
     #     color=LOG_COLOR
     # )
@@ -433,10 +570,18 @@ if __name__ == '__main__':
     #     description="LLA and Visualizing Dataset",
     #     color=LOG_COLOR
     # )
+    # # # Visualize with LLE BERT
+    # run_with_spinner(
+    #     visualize_dataset_values_with_LLE,
+    #     func_args=(X_train, X_test, y_train, y_test),
+    #     func_kwargs={'filename': "dataset_lle_bert"},
+    #     description="LLE and Visualizing Dataset",
+    #     color=LOG_COLOR
+    # )
 
     # -------- Learning model --------
 
-    # # Learn the SVM model
+    # # Learn the NB model
     # learn_NB_model(
     #     X_train, y_train, X_test, y_test,
     #     models=[
@@ -444,19 +589,75 @@ if __name__ == '__main__':
     #         ('GaussianNB', GaussianNB()),
     #         ('BernoulliNB', BernoulliNB()),
     #         ('ComplementNB', ComplementNB())
-    #     ]
+    #     ],
+    #     data_info="_tfidf_data"
     # )
 
-    # Learn the SVM model
-    learn_SVM_model(
-        X_train, y_train, X_test, y_test,
-        kernel_functions=[
-            'linear',
-            'poly',
-            'rbf',
-            'sigmoid'
-        ]
-    )
+    # # Learn the SVM model
+    # learn_SVM_model(
+    #     X_train, y_train, X_test, y_test,
+    #     kernel_functions=[
+    #         'linear',
+    #         'poly',
+    #         'rbf',
+    #         'sigmoid'
+    #     ],
+    #     data_info="_bert_data"
+    # )
 
+    # -------- Learning NN --------
+    # Ensure that the input data is a numpy array and has the correct shape
+    X_train = np.array(X_train)
+    X_test = np.array(X_test)
+    y_train = np.array(y_train)
+    y_test = np.array(y_test)
 
+    print("X_train shape:", X_train.shape)
+    print("X_test shape:", X_test.shape)
+    print("y_train shape:", y_train.shape)
+    print("y_test shape:", y_test.shape)
 
+    # Reshape the input data to add a dummy dimension
+    X_train = np.expand_dims(X_train, axis=-1)
+    X_test = np.expand_dims(X_test, axis=-1)
+
+    print("Reshaped X_train shape:", X_train.shape)
+    print("Reshaped X_test shape:", X_test.shape)
+
+    # Define the input shape based on BERT embeddings shape
+    input_shape = (X_train.shape[1], 1)  # Adding a dummy dimension
+
+    # # Build the NN model
+    model = Sequential([
+        Flatten(input_shape=(768, 1)),
+        Dense(50, activation='relu'),
+        Dense(25, activation='relu'),
+        Dense(25, activation='relu'),
+        Dense(10, activation='relu'),
+        Dense(1, activation='sigmoid')
+    ])
+
+    # Compile the model
+    model.compile(optimizer=Adam(learning_rate=0.0001), loss='binary_crossentropy', metrics=['accuracy'])
+
+    # Print the model summary
+    model.summary()
+
+    # Train the model
+    history = model.fit(X_train, y_train, epochs=225, batch_size=32, validation_data=(X_test, y_test))
+
+    # Evaluate the model on the test set
+    test_loss, test_accuracy = model.evaluate(X_test, y_test)
+
+    print(f'Test Accuracy: {test_accuracy:.4f}')
+    print(f'Test Loss: {test_loss:.4f}')
+
+    # Predict the labels for the test set
+    y_pred = (model.predict(X_test) > 0.5).astype("int32")
+
+    # Calculate and print the accuracy score
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f'Accuracy Score: {accuracy:.4f}')
+
+    # Plot performance
+    plot_nn_performance(history, filename="nn_training_performance_bert_data")
