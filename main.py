@@ -23,7 +23,7 @@ from tensorflow.keras.optimizers import Adam
 from sklearn.metrics import accuracy_score
 import matplotlib.pyplot as plt
 
-from gensim.models import Word2Vec
+# from gensim.models import Word2Vec
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 
@@ -100,22 +100,6 @@ def visualize_dataset_with_LLE(X):
         ylabel="LLE Component 2"
     )
     return lle_result
-
-def define_dataset(main_dataset_folder_path = "aclImdb/"):
-    # Load train data
-    train_neg = read_txt_files(folder_path=f"{main_dataset_folder_path}train/neg")
-    train_pos = read_txt_files(folder_path=f"{main_dataset_folder_path}train/pos")
-    # Load test data
-    test_neg = read_txt_files(folder_path=f"{main_dataset_folder_path}test/neg")
-    test_pos = read_txt_files(folder_path=f"{main_dataset_folder_path}test/pos")
-
-    # Create lists of reviews and labels
-    train_reviews = list(train_neg.values()) + list(train_pos.values())
-    train_labels = [0] * len(train_neg) + [1] * len(train_pos)
-    test_reviews = list(test_neg.values()) + list(test_pos.values())
-    test_labels = [0] * len(test_neg) + [1] * len(test_pos)
-
-    return train_reviews, train_labels, test_reviews, test_labels
 
 
 def plot_confusion_matrix(cm, classes, save_as, save_format="png", title='Confusion Matrix', cmap=plt.cm.Blues):
@@ -605,59 +589,59 @@ if __name__ == '__main__':
     #     data_info="_bert_data"
     # )
 
-    # -------- Learning NN --------
-    # Ensure that the input data is a numpy array and has the correct shape
-    X_train = np.array(X_train)
-    X_test = np.array(X_test)
-    y_train = np.array(y_train)
-    y_test = np.array(y_test)
-
-    print("X_train shape:", X_train.shape)
-    print("X_test shape:", X_test.shape)
-    print("y_train shape:", y_train.shape)
-    print("y_test shape:", y_test.shape)
-
-    # Reshape the input data to add a dummy dimension
-    X_train = np.expand_dims(X_train, axis=-1)
-    X_test = np.expand_dims(X_test, axis=-1)
-
-    print("Reshaped X_train shape:", X_train.shape)
-    print("Reshaped X_test shape:", X_test.shape)
-
-    # Define the input shape based on BERT embeddings shape
-    input_shape = (X_train.shape[1], 1)  # Adding a dummy dimension
-
-    # # Build the NN model
-    model = Sequential([
-        Flatten(input_shape=(768, 1)),
-        Dense(50, activation='relu'),
-        Dense(25, activation='relu'),
-        Dense(25, activation='relu'),
-        Dense(10, activation='relu'),
-        Dense(1, activation='sigmoid')
-    ])
-
-    # Compile the model
-    model.compile(optimizer=Adam(learning_rate=0.0001), loss='binary_crossentropy', metrics=['accuracy'])
-
-    # Print the model summary
-    model.summary()
-
-    # Train the model
-    history = model.fit(X_train, y_train, epochs=225, batch_size=32, validation_data=(X_test, y_test))
-
-    # Evaluate the model on the test set
-    test_loss, test_accuracy = model.evaluate(X_test, y_test)
-
-    print(f'Test Accuracy: {test_accuracy:.4f}')
-    print(f'Test Loss: {test_loss:.4f}')
-
-    # Predict the labels for the test set
-    y_pred = (model.predict(X_test) > 0.5).astype("int32")
-
-    # Calculate and print the accuracy score
-    accuracy = accuracy_score(y_test, y_pred)
-    print(f'Accuracy Score: {accuracy:.4f}')
-
-    # Plot performance
-    plot_nn_performance(history, filename="nn_training_performance_bert_data")
+    # # -------- Learning NN --------
+    # # Ensure that the input data is a numpy array and has the correct shape
+    # X_train = np.array(X_train)
+    # X_test = np.array(X_test)
+    # y_train = np.array(y_train)
+    # y_test = np.array(y_test)
+    #
+    # print("X_train shape:", X_train.shape)
+    # print("X_test shape:", X_test.shape)
+    # print("y_train shape:", y_train.shape)
+    # print("y_test shape:", y_test.shape)
+    #
+    # # Reshape the input data to add a dummy dimension
+    # X_train = np.expand_dims(X_train, axis=-1)
+    # X_test = np.expand_dims(X_test, axis=-1)
+    #
+    # print("Reshaped X_train shape:", X_train.shape)
+    # print("Reshaped X_test shape:", X_test.shape)
+    #
+    # # Define the input shape based on BERT embeddings shape
+    # input_shape = (X_train.shape[1], 1)  # Adding a dummy dimension
+    #
+    # # # Build the NN model
+    # model = Sequential([
+    #     Flatten(input_shape=(768, 1)),
+    #     Dense(50, activation='relu'),
+    #     Dense(25, activation='relu'),
+    #     Dense(25, activation='relu'),
+    #     Dense(10, activation='relu'),
+    #     Dense(1, activation='sigmoid')
+    # ])
+    #
+    # # Compile the model
+    # model.compile(optimizer=Adam(learning_rate=0.0001), loss='binary_crossentropy', metrics=['accuracy'])
+    #
+    # # Print the model summary
+    # model.summary()
+    #
+    # # Train the model
+    # history = model.fit(X_train, y_train, epochs=225, batch_size=32, validation_data=(X_test, y_test))
+    #
+    # # Evaluate the model on the test set
+    # test_loss, test_accuracy = model.evaluate(X_test, y_test)
+    #
+    # print(f'Test Accuracy: {test_accuracy:.4f}')
+    # print(f'Test Loss: {test_loss:.4f}')
+    #
+    # # Predict the labels for the test set
+    # y_pred = (model.predict(X_test) > 0.5).astype("int32")
+    #
+    # # Calculate and print the accuracy score
+    # accuracy = accuracy_score(y_test, y_pred)
+    # print(f'Accuracy Score: {accuracy:.4f}')
+    #
+    # # Plot performance
+    # plot_nn_performance(history, filename="nn_training_performance_bert_data")

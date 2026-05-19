@@ -22,3 +22,20 @@ def read_txt_files(folder_path):
         files_dict[file_name] = file_contents
 
     return files_dict
+
+
+def define_dataset(main_dataset_folder_path = "aclImdb/"):
+    # Load train data
+    train_neg = read_txt_files(folder_path=f"{main_dataset_folder_path}train/neg")
+    train_pos = read_txt_files(folder_path=f"{main_dataset_folder_path}train/pos")
+    # Load test data
+    test_neg = read_txt_files(folder_path=f"{main_dataset_folder_path}test/neg")
+    test_pos = read_txt_files(folder_path=f"{main_dataset_folder_path}test/pos")
+
+    # Create lists of reviews and labels
+    train_reviews = list(train_neg.values()) + list(train_pos.values())
+    train_labels = [0] * len(train_neg) + [1] * len(train_pos)
+    test_reviews = list(test_neg.values()) + list(test_pos.values())
+    test_labels = [0] * len(test_neg) + [1] * len(test_pos)
+
+    return train_reviews, train_labels, test_reviews, test_labels
